@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tempo de Queda Livre (HTML)</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background:#121212; color:#f8f9fa; }
+    canvas { background:#1e1e1e; border:1px solid #333; border-radius:8px; display:block; margin:0 auto; }
+    #infoBox { position:absolute; top:20px; right:20px; background:#1e1e1e; color:#f8f9fa; padding:12px; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.6); }
+    #formulas { position:absolute; bottom:20px; left:20px; background:#1e1e1e; color:#f8f9fa; padding:12px; border-radius:8px; font-size:14px; box-shadow:0 4px 12px rgba(0,0,0,0.6); max-width:260px }
+    .symbol { color:#0dcaf0; }
+  </style>
+</head>
+<body>
+  <div class="container text-center py-4">
+    <h2 class="mb-4">Simulação de Queda Livre em Vácuo</h2>
+    <div class="mb-3">
+      <button id="simBtn" class="btn btn-primary me-2">Simular</button>
+      <button id="resetBtn" class="btn btn-danger">Reset</button>
+    </div>
+    <div class="position-relative">
+      <canvas id="canvas" width="600" height="700"></canvas>
+      <div id="infoBox">
+        <div id="info">
+          Altura: 0.0 m<br>
+          Tempo: 0.00 s<br>
+          Velocidade: 0.00 m/s
+        </div>
+      </div>
+      <div id="formulas">
+        <strong>Fórmulas:</strong><br>
+        <span class="symbol">S</span> = ½ · <span class="symbol">G</span> · <span class="symbol">T</span>² → (deslocamento)<br>
+        <span class="symbol">V</span> = <span class="symbol">G</span> · <span class="symbol">T</span> → (velocidade)<br>
+        <span class="symbol">T</span> = √(2·<span class="symbol">h</span> / <span class="symbol">G</span>) → (tempo)<br>
+        <span class="symbol">V</span> = √(2·<span class="symbol">G</span>·<span class="symbol">h</span>) → (velocidade final)<br><br>
+        <u>Legenda:</u><br>
+        <span class="symbol">S</span>: deslocamento (m)<br>
+        <span class="symbol">h</span>: altura (m)<br>
+        <span class="symbol">T</span>: tempo (s)<br>
+        <span class="symbol">V</span>: velocidade (m/s)<br>
+        <span class="symbol">G</span>: gravidade (9,8 m/s²)
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const WIDTH = canvas.width; const HEIGHT = canvas.height;
+
+    const radius = 25;
+    let x = Math.floor(WIDTH/2);
+    let y = 150;
+    let dragging = false;
+
+    const g = 9.8;
+    const groundY = HEIGHT - 80;
+
+    let simulando = false;
+    let tInicio = 0;
+    let alturaInicial = 0;
+
+    const simBtn = document.getElementById('simBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const infoDiv = document.getElementById('info');
+
+    simBtn.addEventListener('click', ()=>{ if (!simulando) startSim(); });
+    resetBtn.addEventListener('click', ()=>{ simulando = false; y = 150; updateInfo(0,0,0); });
+
+    function startSim(){
+      simulando = true;
+      tInicio = performance.now();
+      alturaInicial = (groundY - y - radius);
+    }
+
+    let rect = canvas.getBoundingClientRect();
+    window.addEventListener('resize', ()=> rect = canvas.getBoundingClientRect());
+
+    canvas.addEventListener('mousedown', (e)=>{
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const dx = mx - x; const dy = my - y;
+      if (!simulando && dx*dx + dy*dy <= radius*radius) dragging = true;
+    });
+    window.addEventListener('mouseup', ()=> dragging = false);
+    window.addEventListener('mousemove', (e)=>{
+      if (!dragging || simulando) return;
+      const my = e.clientY - rect.top;
+      const maxY = groundY - radius;
+      y = (my < maxY) ? my : maxY;
+    });
+
+    function updateInfo(altura, tempo, v){
+      infoDiv.innerHTML = `Altura: ${altura.toFixed(1)} m<br>Tempo: ${tempo.toFixed(2)} s<br>Velocidade: ${v.toFixed(2)} m/s`;
+    }
+
+    function draw(){
+      ctx.clearRect(0,0,WIDTH,HEIGHT);
+
+      // grade de alturas (linhas horizontais a cada 50px)
+      ctx.strokeStyle = '#333';
+      ctx.fillStyle = '#bbb';
+      ctx.font = '12px Arial';
+      for (let i=0; i<=groundY; i+=50){
+        const yy = groundY - i;
+        ctx.beginPath();
+        ctx.moveTo(0, yy);
+        ctx.lineTo(WIDTH, yy);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.fillText(i + ' m', 5, yy - 2);
+      }
+
+      // chão
+      ctx.fillStyle = '#0f2d0f';
+      ctx.fillRect(0, groundY, WIDTH, HEIGHT-groundY);
+      ctx.beginPath(); ctx.moveTo(0, groundY); ctx.lineTo(WIDTH, groundY); ctx.lineWidth = 6; ctx.strokeStyle = '#28a745'; ctx.stroke();
+
+      // bola
+      ctx.beginPath(); ctx.fillStyle = '#3296ff'; ctx.arc(x, Math.round(y), radius, 0, Math.PI*2); ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle='#0b62a8'; ctx.stroke();
+
+      // cálculos
+      let altura_metros = (groundY - y - radius);
+      if (altura_metros < 0) altura_metros = 0;
+
+      let tempo = 0, v_atual = 0;
+      if (simulando){
+        const tSegs = (performance.now() - tInicio) / 1000;
+        const desloc = 0.5 * g * tSegs * tSegs;
+        let newY = groundY - radius - (alturaInicial - desloc);
+        v_atual = g * tSegs;
+        tempo = tSegs;
+
+        if (newY >= groundY - radius){
+          y = groundY - radius;
+          simulando = false;
+        } else {
+          y = newY;
+        }
+      } else {
+        if (altura_metros > 0){
+          tempo = Math.sqrt(2 * altura_metros / g);
+          v_atual = Math.sqrt(2 * g * altura_metros);
+        }
+      }
+
+      updateInfo(altura_metros, tempo, v_atual);
+      requestAnimationFrame(draw);
+    }
+
+    draw();
+  </script>
+</body>
+</html>
